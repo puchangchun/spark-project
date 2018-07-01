@@ -19,6 +19,7 @@ public interface Constant {
 
 	/**
 	 * spark作业的常量
+	 * session的聚合里出现的字段
 	 */
 	String SPARK_APP_NAME_SESSION = "UserVisitSessionAnalyzeSpark";
 	String FIELD_SESSION_ID = "sessionid";
@@ -32,8 +33,16 @@ public interface Constant {
 	
 	/**
 	 * 任务相关的常量
+	 * 出现在task中的param参数里出现的字段
 	 */
 	String PARAM_START_DATE = "startDate";
 	String PARAM_END_DATE = "endDate";
+	String PARAM_START_AGE= "startAge";
+	String PARAM_END_AGE = "endAge";
+	String PARAM_PROFESSIONALS = "professionals";
+	String PARAM_CITIES = "cites";
+	String PARAM_SEX = "sex";
+	String PARAM_KEYWORDS = "keywords";
+	String PARAM_CATEGORY_IDS = "categoryIds";
 
 }
