@@ -101,7 +101,7 @@ public class MockData {
 		
 		Dataset<Row> df = sqlContext.createDataFrame(rowsRDD, schema);
 		
-		df.registerTempTable("user_visit_action");  
+		df.createOrReplaceTempView("user_visit_action");
 		for(Row _row : df.takeAsList(1)) {
 			System.out.println(_row);  
 		}
@@ -142,7 +142,13 @@ public class MockData {
 			System.out.println(_row);  
 		}
 		
-		df2.registerTempTable("user_info");  
+		df2.createOrReplaceTempView("user_info");
+
+/*		String sql =
+				"select * "
+						+ "from user_info ";
+		Dataset<Row> dataset = sqlContext.sql(sql);
+		System.out.println(dataset.count());*/
 	}
 	
 }

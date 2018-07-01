@@ -57,14 +57,14 @@ public class ValidUtils {
     public static boolean in(String data, String dataField,
                              String parameter, String paramField) {
         String paramFieldValue = StringUtils.getFieldFromConcatString(
-                parameter, "\\|", paramField);
+                parameter, "|", paramField);
         if (paramFieldValue == null) {
             return true;
         }
         String[] paramFieldValueSplited = paramFieldValue.split(",");
 
         String dataFieldValue = StringUtils.getFieldFromConcatString(
-                data, "\\|", dataField);
+                data, "|", dataField);
         if (dataFieldValue != null) {
             String[] dataFieldValueSplited = dataFieldValue.split(",");
 
@@ -92,13 +92,13 @@ public class ValidUtils {
     public static boolean equal(String data, String dataField,
                                 String parameter, String paramField) {
         String paramFieldValue = StringUtils.getFieldFromConcatString(
-                parameter, "\\|", paramField);
+                parameter, "|", paramField);
         if (paramFieldValue == null) {
             return true;
         }
 
         String dataFieldValue = StringUtils.getFieldFromConcatString(
-                data, "\\|", dataField);
+                data, "|", dataField);
         if (dataFieldValue != null) {
             if (dataFieldValue.equals(paramFieldValue)) {
                 return true;

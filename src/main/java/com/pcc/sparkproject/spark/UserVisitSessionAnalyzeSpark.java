@@ -59,17 +59,22 @@ public class UserVisitSessionAnalyzeSpark {
         /**
          * 下面要将用户行为数据和用户信息数据的两表进行聚合 两表通过user_id关联 最后的结果是：session_id ---- 多种行为 + 用户信息
          * 一个session又多种行为，所以先要将一个session做聚合，把多种行为聚合在一起 再将session对应的用户信息关联上
-         *
-         */
+         **/
+
         //得到聚合后的RDD
         JavaPairRDD<String, String> sessionid2ActionInfoRDD = aggregateBySession(sqlContext, actionRDD);
+        for (Tuple2<String, String> tuple2 : sessionid2ActionInfoRDD.take(10)) {
+            System.out.println(tuple2._1 + ":" + tuple2._2);
+        }
 
         //进行过滤
         JavaPairRDD<String, String> filterSessionRDD = filterSession(sessionid2ActionInfoRDD, taskParam);
 
-        for (Tuple2<String,String> tuple2:filterSessionRDD.take(10)){
-            System.out.println(tuple2);
+        for (Tuple2<String, String> tuple2 : filterSessionRDD.take(10)) {
+            System.out.println(tuple2._1 + ":" + tuple2._2);
         }
+
+
         // 关闭spark上下文
         sc.close();
 
@@ -104,7 +109,7 @@ public class UserVisitSessionAnalyzeSpark {
                 + (categoryIds != null ? Constant.PARAM_CATEGORY_IDS + "=" + categoryIds : "");
 
         //可能会有| 需要去掉| 来调用辅助类
-        if (parameter.endsWith("\\|")) {
+        if (parameter.endsWith("|")) {
             parameter = parameter.substring(0, parameter.length() - 1);
         }
 
@@ -185,8 +190,11 @@ public class UserVisitSessionAnalyzeSpark {
         String startDate = ParamUtils.getParam(paramJS, Constant.PARAM_START_DATE);
         String endDate = ParamUtils.getParam(paramJS, Constant.PARAM_END_DATE);
         // 建立SQL语句
-        String sql = "select * " + "from user_visit_action" + " where date between '" + startDate + "' and '" + endDate
-                + "'";
+        String sql =
+                "select * "
+                        + "from user_visit_action "
+                        + "where date>='" + startDate + "' "
+                        + "and date<='" + endDate + "'";
 
         // 执行
         Dataset<Row> datasets = sqlContext.sql(sql);
@@ -218,8 +226,10 @@ public class UserVisitSessionAnalyzeSpark {
         // 转换成PairRDD key - value
         // mapToPair对每个Row通过函数转换成Tuple<KEY,VALUE>
         JavaPairRDD<String, Row> sessionidPairRDD = actionRDD.mapToPair((row) -> {
-            return new Tuple2<String, Row>(row.getString(2), row);
+            return new Tuple2<>(row.getString(2), row);
         });
+        System.out.println(sessionidPairRDD.count()+"sessionid + string");
+
 
         // 用sessionid分组
         JavaPairRDD<String, Iterable<Row>> sessionid2rowRDD = sessionidPairRDD.groupByKey();
@@ -236,11 +246,11 @@ public class UserVisitSessionAnalyzeSpark {
             // 遍历每一种行为，一种行为对应一个Row
             for (Row row : tuple._2) {
                 // 获取该session的userid
-                if (userid != null) {
+                if (userid == null) {
                     userid = row.getLong(1);
                 }
                 String searchKeyWord = row.getString(5);
-                Long clickCategoryId = row.getLong(6);
+                Long clickCategoryId = row.isNullAt(6) ? null : row.getLong(6);
                 // 表的格式问题
                 // 搜索行为才有searchKeyWord字段
                 // 点击品类行为才有clickCategoryId字段
@@ -267,18 +277,21 @@ public class UserVisitSessionAnalyzeSpark {
                     + "=" + searchKeyWords + "|" + Constant.FIELD_CLICK_CATEGORY_IDS + "=" + clickCategoryIds;
 
             // 返回<userid,string (sessionid=?|searchkeywords=?|..)>
-            return new Tuple2<Long, String>(userid, partAggInfo);
+            return new Tuple2<>(userid, partAggInfo);
         });
+
 
         // 得到userInfoRDD
         JavaRDD<Row> userInfoRDD = getUserInfoRDD(sqlContext);
         // 转化为key-value
         JavaPairRDD<Long, Row> userid2InfoRDD = userInfoRDD.mapToPair((row) -> {
-            return new Tuple2<Long, Row>(row.getLong(0), row);
+            return new Tuple2<>(row.getLong(0), row);
         });
 
         // 通过key进行拼接
         JavaPairRDD<Long, Tuple2<String, Row>> userid2FullInfoRDD = userid2partActionRDD.join(userid2InfoRDD);
+
+        System.out.println(userid2partActionRDD.count()+"userid + aggrInfo ");
         // 处理拼接后的数据
         JavaPairRDD<String, String> sessionid2FullAggrInfoRDD = userid2FullInfoRDD.mapToPair((myTuple) -> {
             Long userid = myTuple._1;
@@ -297,7 +310,7 @@ public class UserVisitSessionAnalyzeSpark {
             return new Tuple2<String, String>(sessionid, fullAggrInfo);
         });
 
-        return null;
+        return sessionid2FullAggrInfoRDD;
 
     }
 
