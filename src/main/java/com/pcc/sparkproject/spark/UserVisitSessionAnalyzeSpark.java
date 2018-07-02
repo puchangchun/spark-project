@@ -48,7 +48,7 @@ public class UserVisitSessionAnalyzeSpark {
         // 是否模拟数据
         mock(sc, sqlContext);
         // 根据传递的参数拿到taskid
-        long taskid = ParamUtils.getTaskIdFromArgs(args);
+        Long taskid = ParamUtils.getTaskIdFromArgs(args);
         // 取数据到DAO
         Task task = taskDao.findById(taskid);
         // 得到人物参数的JSON对象
