@@ -9,6 +9,7 @@ import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.hive.HiveContext;
 
 import com.alibaba.fastjson.JSONObject;
@@ -36,17 +37,18 @@ import scala.Tuple2;
  * @author 99653
  */
 public class UserVisitSessionAnalyzeSpark {
+
     public static void main(String[] args) {
         args = new String[]{"1"};
 
         // 得到spark上下文
         SparkConf conf = new SparkConf().setAppName(Constant.SPARK_APP_NAME_SESSION).setMaster("local");
-        JavaSparkContext sc = new JavaSparkContext(conf);
-        SQLContext sqlContext = getSQLContext(sc);
+        SparkSession sparkSession = SparkSession.builder().config(conf).getOrCreate();
+        JavaSparkContext sc = new JavaSparkContext(sparkSession.sparkContext());
         // 数据层的组件
         ITaskDao taskDao = DaoFactory.getTaskDao();
-        // 是否模拟数据
-        mock(sc, sqlContext);
+        // 是否模拟数据,模拟数据中的日期为当天的，需要需改mysql task表的paramJS中的日期范围包含当天才能获取
+        mock(sc, sparkSession);
         // 根据传递的参数拿到taskid
         Long taskid = ParamUtils.getTaskIdFromArgs(args);
         // 取数据到DAO
@@ -54,15 +56,15 @@ public class UserVisitSessionAnalyzeSpark {
         // 得到人物参数的JSON对象
         JSONObject taskParam = JSONObject.parseObject(task.getTaskParam());
         // 根据时间参数拿到用户行为表的RDD
-        JavaRDD<Row> actionRDD = getActionRDDByDateRange(sqlContext, taskParam);
+        JavaRDD<Row> actionRDD = getActionRDDByDateRange(sparkSession, taskParam);
 
-        /**
-         * 下面要将用户行为数据和用户信息数据的两表进行聚合 两表通过user_id关联 最后的结果是：session_id ---- 多种行为 + 用户信息
-         * 一个session又多种行为，所以先要将一个session做聚合，把多种行为聚合在一起 再将session对应的用户信息关联上
-         **/
+
+//          下面要将用户行为数据和用户信息数据的两表进行聚合 两表通过user_id关联 最后的结果是：session_id ---- 多种行为 + 用户信息
+//          一个session又多种行为，所以先要将一个session做聚合，把多种行为聚合在一起 再将session对应的用户信息关联上
+
 
         //得到聚合后的RDD
-        JavaPairRDD<String, String> sessionid2ActionInfoRDD = aggregateBySession(sqlContext, actionRDD);
+        JavaPairRDD<String, String> sessionid2ActionInfoRDD = aggregateBySession(sparkSession, actionRDD);
         for (Tuple2<String, String> tuple2 : sessionid2ActionInfoRDD.take(10)) {
             System.out.println(tuple2._1 + ":" + tuple2._2);
         }
@@ -87,8 +89,7 @@ public class UserVisitSessionAnalyzeSpark {
      * @param taskParam
      * @return
      */
-    private static JavaPairRDD<String, String>
-    filterSession(JavaPairRDD<String, String> sessionid2ActionInfoRDD, JSONObject taskParam) {
+    private static JavaPairRDD<String, String> filterSession(JavaPairRDD<String, String> sessionid2ActionInfoRDD, JSONObject taskParam) {
 
         //取出给定参数
         String startAge = ParamUtils.getParam(taskParam, Constant.PARAM_START_AGE);
@@ -157,7 +158,7 @@ public class UserVisitSessionAnalyzeSpark {
      * @param sc
      * @param sqlContext
      */
-    private static void mock(JavaSparkContext sc, SQLContext sqlContext) {
+    private static void mock(JavaSparkContext sc, SparkSession sqlContext) {
         if (ConfigrationManager.getBoolean(Constant.SPARK_LOCAL)) {
             // 本地
             MockData.mock(sc, sqlContext);
@@ -184,7 +185,7 @@ public class UserVisitSessionAnalyzeSpark {
      * @param paramJS
      * @return
      */
-    public static JavaRDD<Row> getActionRDDByDateRange(SQLContext sqlContext, JSONObject paramJS) {
+    public static JavaRDD<Row> getActionRDDByDateRange(SparkSession sqlContext, JSONObject paramJS) {
 
         // 拿到时间范围
         String startDate = ParamUtils.getParam(paramJS, Constant.PARAM_START_DATE);
@@ -204,13 +205,13 @@ public class UserVisitSessionAnalyzeSpark {
     /**
      * 获取所有用户信息的RDD
      *
-     * @param sqlContext
+     * @param sparkSession
      * @return
      */
-    public static JavaRDD<Row> getUserInfoRDD(SQLContext sqlContext) {
+    public static JavaRDD<Row> getUserInfoRDD(SparkSession sparkSession) {
         String sql = "select * from user_info";
         // 执行
-        Dataset<Row> datasets = sqlContext.sql(sql);
+        Dataset<Row> datasets = sparkSession.sql(sql);
         return datasets.toJavaRDD();
     }
 
@@ -220,15 +221,14 @@ public class UserVisitSessionAnalyzeSpark {
      * @param actionRDD 用户行为的元素数据RDD
      * @return
      */
-    public static JavaPairRDD<String, String> aggregateBySession(SQLContext sqlContext, JavaRDD<Row> actionRDD) {
+    public static JavaPairRDD<String, String> aggregateBySession(SparkSession sqlContext, JavaRDD<Row> actionRDD) {
         // Row相当于数据库表中的一行数据
-
         // 转换成PairRDD key - value
         // mapToPair对每个Row通过函数转换成Tuple<KEY,VALUE>
         JavaPairRDD<String, Row> sessionidPairRDD = actionRDD.mapToPair((row) -> {
             return new Tuple2<>(row.getString(2), row);
         });
-        System.out.println(sessionidPairRDD.count()+"sessionid + string");
+        System.out.println(sessionidPairRDD.count() + " sessionid + string");
 
 
         // 用sessionid分组
@@ -291,7 +291,7 @@ public class UserVisitSessionAnalyzeSpark {
         // 通过key进行拼接
         JavaPairRDD<Long, Tuple2<String, Row>> userid2FullInfoRDD = userid2partActionRDD.join(userid2InfoRDD);
 
-        System.out.println(userid2partActionRDD.count()+"userid + aggrInfo ");
+        System.out.println(userid2partActionRDD.count() + "userid + aggrInfo ");
         // 处理拼接后的数据
         JavaPairRDD<String, String> sessionid2FullAggrInfoRDD = userid2FullInfoRDD.mapToPair((myTuple) -> {
             Long userid = myTuple._1;

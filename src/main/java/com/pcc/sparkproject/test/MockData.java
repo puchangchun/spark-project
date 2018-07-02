@@ -8,11 +8,7 @@ import java.util.UUID;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.sql.DataFrameReader;
-import org.apache.spark.sql.Dataset;
-import org.apache.spark.sql.Row;
-import org.apache.spark.sql.RowFactory;
-import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.*;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.StructType;
 import com.pcc.sparkproject.util.DateUtils;
@@ -29,10 +25,10 @@ public class MockData {
 	/**
 	 * 数据
 	 * @param sc
-	 * @param sqlContext
+	 * @param sparkSession
 	 */
 	public static void mock(JavaSparkContext sc,
-			SQLContext sqlContext) {
+							SparkSession sparkSession) {
 		List<Row> rows = new ArrayList<Row>();
 		
 		String[] searchKeywords = new String[] {"火锅", "蛋糕", "重庆辣子鸡", "重庆小面",
@@ -99,7 +95,7 @@ public class MockData {
 				DataTypes.createStructField("pay_category_ids", DataTypes.StringType, true),
 				DataTypes.createStructField("pay_product_ids", DataTypes.StringType, true)));
 		
-		Dataset<Row> df = sqlContext.createDataFrame(rowsRDD, schema);
+		Dataset<Row> df = sparkSession.createDataFrame(rowsRDD, schema);
 		
 		df.createOrReplaceTempView("user_visit_action");
 		for(Row _row : df.takeAsList(1)) {
@@ -137,7 +133,7 @@ public class MockData {
 				DataTypes.createStructField("city", DataTypes.StringType, true),
 				DataTypes.createStructField("sex", DataTypes.StringType, true)));
 		
-		Dataset<Row> df2 = sqlContext.createDataFrame(rowsRDD, schema2);
+		Dataset<Row> df2 = sparkSession.createDataFrame(rowsRDD, schema2);
 		for(Row _row : df2.takeAsList(1)) {
 			System.out.println(_row);  
 		}
