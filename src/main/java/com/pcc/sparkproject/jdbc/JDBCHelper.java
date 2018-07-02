@@ -8,10 +8,8 @@ import java.sql.SQLException;
 import java.util.LinkedList;
 import java.util.List;
 
-import org.apache.calcite.util.Static;
-
 import com.pcc.sparkproject.conf.ConfigrationManager;
-import com.pcc.sparkproject.constant.Constant;
+import com.pcc.sparkproject.constant.Constants;
 
 public class JDBCHelper {
 	// 单列对象
@@ -22,13 +20,13 @@ public class JDBCHelper {
 
 	private JDBCHelper() {
 		// 获取配置文件中数据库连接池的大小
-		int datasourceSize = ConfigrationManager.getInteger(Constant.JDBC_DATASOURCE_SIZE);
+		int datasourceSize = ConfigrationManager.getInteger(Constants.JDBC_DATASOURCE_SIZE);
 
 		// 初始化数据库连接池
 		for (int i = 0; i < datasourceSize; i++) {
-			String url = ConfigrationManager.getProperty(Constant.JDBC_URL);
-			String name = ConfigrationManager.getProperty(Constant.JDBC_USER);
-			String pwd = ConfigrationManager.getProperty(Constant.JDBC_PASSWORD);
+			String url = ConfigrationManager.getProperty(Constants.JDBC_URL);
+			String name = ConfigrationManager.getProperty(Constants.JDBC_USER);
+			String pwd = ConfigrationManager.getProperty(Constants.JDBC_PASSWORD);
 			try {
 				Connection connection = DriverManager.getConnection(url, name, pwd);
 				datasource.push(connection);
@@ -47,7 +45,7 @@ public class JDBCHelper {
 			/**
 			 * 通过配置文件，加载指定的数据库驱动
 			 */
-			Class.forName(ConfigrationManager.getProperty(Constant.JDBC_DRIVER));
+			Class.forName(ConfigrationManager.getProperty(Constants.JDBC_DRIVER));
 		} catch (ClassNotFoundException e) {
 			e.printStackTrace();
 		}

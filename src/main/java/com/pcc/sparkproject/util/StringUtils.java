@@ -77,7 +77,7 @@ public class StringUtils {
                 }
             }
         }
-        return null;
+        return "";
     }
 
     /**
@@ -89,7 +89,7 @@ public class StringUtils {
      * @param newFieldValue 新的field值
      * @return 字段值
      */
-    public static String setFieldInConcatString(String str,
+    public static StringBuffer setFieldInConcatString(String str,
                                                 String delimiter, String field, String newFieldValue) {
         String[] fields = str.split(delimiter);
 
@@ -110,7 +110,7 @@ public class StringUtils {
             }
         }
 
-        return buffer.toString();
+        return buffer;
     }
 
 }
