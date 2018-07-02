@@ -13,26 +13,26 @@ public class TaskDaoImpl implements ITaskDao{
 	 * 根据之间查询task
 	 */
 	@Override
-	public Task findById(long task_id) {
-		Task task = new Task();
+	public Task findById(Long task_id) {
+		final Task _task = new Task();
 		String sql = "select * from task where task_id = ?";
 		JDBCHelper.getInstance().executeQurey(sql,(ResultSet rs)->{
 			try {
 				if (rs.next()) {
-					task.setTaskid(rs.getLong(1));
-					task.setTaskName(rs.getString(2));
-					task.setCreateTime(rs.getString(3));
-					task.setStartTime(rs.getString(4));
-					task.setFinishTime(rs.getString(5));
-					task.setTaskType(rs.getString(6));
-					task.setTaskStatus(rs.getString(7));
-					task.setTaskParam(rs.getString(8));
+					_task.setTaskid(rs.getLong(1));
+					_task.setTaskName(rs.getString(2));
+					_task.setCreateTime(rs.getString(3));
+					_task.setStartTime(rs.getString(4));
+					_task.setFinishTime(rs.getString(5));
+					_task.setTaskType(rs.getString(6));
+					_task.setTaskStatus(rs.getString(7));
+					_task.setTaskParam(rs.getString(8));
 				}
 			} catch (SQLException e) {
 				e.printStackTrace();
 			}
 		}, task_id);	
-		return task;
+		return _task;
 	}
 
 }
