@@ -9,5 +9,5 @@ import com.pcc.sparkproject.domian.Task;
  */
 
 public interface ITaskDao {
-	Task findById(long taskid);
+	Task findById(Long taskid);
 }
