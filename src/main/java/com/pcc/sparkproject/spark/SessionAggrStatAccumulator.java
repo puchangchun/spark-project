@@ -82,13 +82,32 @@ public class SessionAggrStatAccumulator extends AccumulatorV2<String, String> {
             int newValue = Integer.valueOf(oldValue) + 1;
 
             // 使用StringUtils工具类，将v1中，v2对应的值，设置成新的累加后的值
-            sessionStatusStringBuffer = StringUtils.setFieldInConcatString(sessionStatusStringBuffer.toString(), "\\|", s, String.valueOf(newValue));
+            StringUtils.setFieldInConcatString(sessionStatusStringBuffer, "\\|", s, String.valueOf(newValue));
         }
     }
 
     @Override
     public void merge(AccumulatorV2<String, String> accumulatorV2) {
+        if (accumulatorV2 instanceof SessionAggrStatAccumulator){
+            SessionAggrStatAccumulator sessionAggrStatAccumulator2 = (SessionAggrStatAccumulator) accumulatorV2;
+            String sessionCount2 = sessionAggrStatAccumulator2.sessionStatusStringBuffer.toString();
+            /**
+             * 遍历每一个key-value
+             */
+            for (String strKeyValue : sessionCount2.split("\\|")){
+                /**
+                 * 执行加操作
+                 */
+                String[] strAry = strKeyValue.split("=");
 
+                if (StringUtils.isNotEmpty(strAry[1])){
+                    String value1 = StringUtils
+                        .getFieldFromConcatString(sessionStatusStringBuffer.toString(), "\\|", strAry[0]);
+                    int newValue = Integer.valueOf(strAry[1]) + Integer.valueOf(value1);
+                    StringUtils.setFieldInConcatString(sessionStatusStringBuffer, "\\|",strAry[0],String.valueOf(newValue));
+                }
+            }
+        }
     }
 
     @Override

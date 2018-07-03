@@ -11,6 +11,11 @@ import java.util.List;
 import com.pcc.sparkproject.conf.ConfigrationManager;
 import com.pcc.sparkproject.constant.Constants;
 
+/**
+ * 数据库连接池对象
+ * 管理数据库的链接
+ * 优化数据库的增删改查接口
+ */
 public class JDBCHelper {
 	// 单列对象
 	private static JDBCHelper jdbcHelper = null;

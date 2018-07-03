@@ -1,8 +1,15 @@
 package com.pcc.sparkproject.spark;
 
-import com.pcc.sparkproject.util.DateUtils;
-import com.pcc.sparkproject.util.ValidUtils;
-import org.apache.spark.Accumulator;
+import com.alibaba.fastjson.JSONObject;
+import com.pcc.sparkproject.conf.ConfigrationManager;
+import com.pcc.sparkproject.constant.Constants;
+import com.pcc.sparkproject.dao.ISessionAggrStatDAO;
+import com.pcc.sparkproject.dao.ITaskDao;
+import com.pcc.sparkproject.dao.impl.DaoFactory;
+import com.pcc.sparkproject.domian.SessionAggrStat;
+import com.pcc.sparkproject.domian.Task;
+import com.pcc.sparkproject.test.MockData;
+import com.pcc.sparkproject.util.*;
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
@@ -10,21 +17,7 @@ import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.Function;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
-import org.apache.spark.sql.SQLContext;
 import org.apache.spark.sql.SparkSession;
-import org.apache.spark.sql.hive.HiveContext;
-
-import com.alibaba.fastjson.JSONObject;
-import com.pcc.sparkproject.conf.ConfigrationManager;
-import com.pcc.sparkproject.constant.Constants;
-import com.pcc.sparkproject.dao.ITaskDao;
-import com.pcc.sparkproject.dao.impl.DaoFactory;
-import com.pcc.sparkproject.domian.Task;
-import com.pcc.sparkproject.test.MockData;
-import com.pcc.sparkproject.util.ParamUtils;
-import com.pcc.sparkproject.util.StringUtils;
-
-import org.apache.spark.util.AccumulatorV2;
 import scala.Tuple2;
 
 import java.util.Date;
@@ -63,14 +56,17 @@ public class UserVisitSessionAnalyzeSpark {
         // 根据时间参数拿到用户行为表的RDD
         JavaRDD<Row> actionRDD = getActionRDDByDateRange(sparkSession, taskParam);
 
+        /**
+         * 下面要将用户行为数据和用户信息数据的两表进行聚合 两表通过user_id关联 最后的结果是：session_id ---- 多种行为 + 用户信息
+         * 一个session又多种行为，所以先要将一个session做聚合，把多种行为聚合在一起 再将session对应的用户信息关联上
+         * 聚合的时候同时计算访问时长和步长
+         */
 
-//          下面要将用户行为数据和用户信息数据的两表进行聚合 两表通过user_id关联 最后的结果是：session_id ---- 多种行为 + 用户信息
-//          一个session又多种行为，所以先要将一个session做聚合，把多种行为聚合在一起 再将session对应的用户信息关联上
-//          聚合的时候同时计算访问时长和步长
 
-
-
-        /*得到聚合后的RDD*/
+        /**
+         * 信息聚合
+         * 聚合成user-id --> 用户session合并信息 + 访问时间和步长的的计算
+         */
         JavaPairRDD<String, String> sessionid2ActionInfoRDD = aggregateBySession(sparkSession, actionRDD);
 
         //自定义累加器
@@ -87,18 +83,124 @@ public class UserVisitSessionAnalyzeSpark {
          */
         JavaPairRDD<String, String> filterSessionRDD = filterSession(sessionid2ActionInfoRDD, taskParam, sessionAggrStatAccumulator);
 
-        for (Tuple2<String, String> tuple2 : filterSessionRDD.take(10)) {
+/*        for (Tuple2<String, String> tuple2 : filterSessionRDD.take(50)) {
             System.out.println(tuple2._1 + ":" + tuple2._2);
-        }
+        }*/
 
-        filterSessionRDD.collect();
-
+        System.out.println(filterSessionRDD.collect().size()+"------filter size-----");
+        /**
+         * 要ActionRDD之后才会执行acc累加器
+         */
         System.out.println(sessionAggrStatAccumulator.value());
 
+        /**
+         * 定义写入mySql--session-aggr-stat表中方法
+         * 该表是对过滤后session的统计
+         */
+        writeSessionAggrTable(sessionAggrStatAccumulator.value(),taskid);
 
         // 关闭spark上下文
         sc.close();
 
+    }
+
+    /**
+     * 把统计后的结果写入数据库
+     *
+     * @param value 累加器获取的统计值
+     */
+    private static void writeSessionAggrTable(String value,Long taskid) {
+        double session_count = Double.valueOf(StringUtils.getFieldFromConcatString(
+                value, "\\|", Constants.SESSION_COUNT));
+
+        long visit_length_1s_3s = Long.valueOf(StringUtils.getFieldFromConcatString(
+                value, "\\|", Constants.TIME_PERIOD_1s_3s));
+        long visit_length_4s_6s = Long.valueOf(StringUtils.getFieldFromConcatString(
+                value, "\\|", Constants.TIME_PERIOD_4s_6s));
+        long visit_length_7s_9s = Long.valueOf(StringUtils.getFieldFromConcatString(
+                value, "\\|", Constants.TIME_PERIOD_7s_9s));
+        long visit_length_10s_30s = Long.valueOf(StringUtils.getFieldFromConcatString(
+                value, "\\|", Constants.TIME_PERIOD_10s_30s));
+        long visit_length_30s_60s = Long.valueOf(StringUtils.getFieldFromConcatString(
+                value, "\\|", Constants.TIME_PERIOD_30s_60s));
+        long visit_length_1m_3m = Long.valueOf(StringUtils.getFieldFromConcatString(
+                value, "\\|", Constants.TIME_PERIOD_1m_3m));
+        long visit_length_3m_10m = Long.valueOf(StringUtils.getFieldFromConcatString(
+                value, "\\|", Constants.TIME_PERIOD_3m_10m));
+        long visit_length_10m_30m = Long.valueOf(StringUtils.getFieldFromConcatString(
+                value, "\\|", Constants.TIME_PERIOD_10m_30m));
+        long visit_length_30m = Long.valueOf(StringUtils.getFieldFromConcatString(
+                value, "\\|", Constants.TIME_PERIOD_30m));
+
+        long step_length_1_3 = Long.valueOf(StringUtils.getFieldFromConcatString(
+                value, "\\|", Constants.STEP_PERIOD_1_3));
+        long step_length_4_6 = Long.valueOf(StringUtils.getFieldFromConcatString(
+                value, "\\|", Constants.STEP_PERIOD_4_6));
+        long step_length_7_9 = Long.valueOf(StringUtils.getFieldFromConcatString(
+                value, "\\|", Constants.STEP_PERIOD_7_9));
+        long step_length_10_30 = Long.valueOf(StringUtils.getFieldFromConcatString(
+                value, "\\|", Constants.STEP_PERIOD_10_30));
+        long step_length_30_60 = Long.valueOf(StringUtils.getFieldFromConcatString(
+                value, "\\|", Constants.STEP_PERIOD_30_60));
+        long step_length_60 = Long.valueOf(StringUtils.getFieldFromConcatString(
+                value, "\\|", Constants.STEP_PERIOD_60));
+
+        // 计算各个访问时长和访问步长的范围
+        double visit_length_1s_3s_ratio = NumberUtils.formatDouble(
+                visit_length_1s_3s / session_count, 4);
+        double visit_length_4s_6s_ratio = NumberUtils.formatDouble(
+                visit_length_4s_6s / session_count, 4);
+        double visit_length_7s_9s_ratio = NumberUtils.formatDouble(
+                visit_length_7s_9s / session_count, 4);
+        double visit_length_10s_30s_ratio = NumberUtils.formatDouble(
+                visit_length_10s_30s / session_count, 4);
+        double visit_length_30s_60s_ratio = NumberUtils.formatDouble(
+                visit_length_30s_60s / session_count, 4);
+        double visit_length_1m_3m_ratio = NumberUtils.formatDouble(
+                visit_length_1m_3m / session_count, 4);
+        double visit_length_3m_10m_ratio = NumberUtils.formatDouble(
+                visit_length_3m_10m / session_count, 4);
+
+        double testdouble  =visit_length_10m_30m /session_count;
+        double visit_length_10m_30m_ratio = NumberUtils.formatDouble(
+                visit_length_10m_30m / session_count, 4);
+        double visit_length_30m_ratio = NumberUtils.formatDouble(
+                visit_length_30m / session_count, 4);
+
+        double step_length_1_3_ratio = NumberUtils.formatDouble(
+                step_length_1_3 / session_count, 4);
+        double step_length_4_6_ratio = NumberUtils.formatDouble(
+                step_length_4_6 / session_count, 4);
+        double step_length_7_9_ratio = NumberUtils.formatDouble(
+                step_length_7_9 / session_count, 4);
+        double step_length_10_30_ratio = NumberUtils.formatDouble(
+                step_length_10_30 / session_count, 4);
+        double step_length_30_60_ratio = NumberUtils.formatDouble(
+                step_length_30_60 / session_count, 4);
+        double step_length_60_ratio = NumberUtils.formatDouble(
+                step_length_60 / session_count, 4);
+
+        // 将统计结果封装为Domain对象
+        SessionAggrStat sessionAggrStat = new SessionAggrStat();
+        sessionAggrStat.setTaskid(taskid);
+        sessionAggrStat.setSession_count(Math.round(session_count));
+        sessionAggrStat.setVisit_length_1s_3s_ratio(visit_length_1s_3s_ratio);
+        sessionAggrStat.setVisit_length_4s_6s_ratio(visit_length_4s_6s_ratio);
+        sessionAggrStat.setVisit_length_7s_9s_ratio(visit_length_7s_9s_ratio);
+        sessionAggrStat.setVisit_length_10s_30s_ratio(visit_length_10s_30s_ratio);
+        sessionAggrStat.setVisit_length_30s_60s_ratio(visit_length_30s_60s_ratio);
+        sessionAggrStat.setVisit_length_1m_3m_ratio(visit_length_1m_3m_ratio);
+        sessionAggrStat.setVisit_length_3m_10m_ratio(visit_length_3m_10m_ratio);
+        sessionAggrStat.setVisit_length_10m_30m_ratio(visit_length_10m_30m_ratio);
+        sessionAggrStat.setVisit_length_30m_ratio(visit_length_30m_ratio);
+        sessionAggrStat.setStep_length_1_3_ratio(step_length_1_3_ratio);
+        sessionAggrStat.setStep_length_4_6_ratio(step_length_4_6_ratio);
+        sessionAggrStat.setStep_length_7_9_ratio(step_length_7_9_ratio);
+        sessionAggrStat.setStep_length_10_30_ratio(step_length_10_30_ratio);
+        sessionAggrStat.setStep_length_30_60_ratio(step_length_30_60_ratio);
+        sessionAggrStat.setStep_length_60_ratio(step_length_60_ratio);
+
+        DaoFactory.getSessionAggrStatDAO().insert(sessionAggrStat);
     }
 
     /**
@@ -254,36 +356,36 @@ public class UserVisitSessionAnalyzeSpark {
      * 是否需要生成本地数据进行调试
      *
      * @param sc
-     * @param sqlContext
+     * @param sparkSession
      */
-    private static void mock(JavaSparkContext sc, SparkSession sqlContext) {
+    private static void mock(JavaSparkContext sc, SparkSession sparkSession) {
         if (ConfigrationManager.getBoolean(Constants.SPARK_LOCAL)) {
             // 本地
-            MockData.mock(sc, sqlContext);
+            MockData.mock(sc, sparkSession);
         }
     }
 
     /**
-     * 2.0以后SQLCONTEXT HIVECONTEXT SPARKCONTEXT合并在SPARKSESION 分本地和生产环境 获取SQLContext
+     * 2.0以后sparkSession HIVECONTEXT SPARKCONTEXT合并在SPARKSESION 分本地和生产环境 获取sparkSession
      *
      * @return
      */
-    public static SQLContext getSQLContext(JavaSparkContext sc) {
+/*    public static sparkSession getsparkSession(JavaSparkContext sc) {
         if (ConfigrationManager.getBoolean(Constants.SPARK_LOCAL)) {
-            return new SQLContext(sc);
+            return new sparkSession(sc);
         } else {
             return new HiveContext(sc);
         }
-    }
+    }*/
 
     /**
      * 通过数据库查询出来的params，来获取时间参数 并且得到指定时间范围用户访问行为数据
      *
-     * @param sqlContext
+     * @param sparkSession
      * @param paramJS
      * @return
      */
-    public static JavaRDD<Row> getActionRDDByDateRange(SparkSession sqlContext, JSONObject paramJS) {
+    public static JavaRDD<Row> getActionRDDByDateRange(SparkSession sparkSession, JSONObject paramJS) {
 
         // 拿到时间范围
         String startDate = ParamUtils.getParam(paramJS, Constants.PARAM_START_DATE);
@@ -296,7 +398,7 @@ public class UserVisitSessionAnalyzeSpark {
                         + "and date<='" + endDate + "'";
 
         // 执行
-        Dataset<Row> datasets = sqlContext.sql(sql);
+        Dataset<Row> datasets = sparkSession.sql(sql);
         return datasets.toJavaRDD();
     }
 
@@ -319,7 +421,7 @@ public class UserVisitSessionAnalyzeSpark {
      * @param actionRDD 用户行为的元素数据RDD
      * @return
      */
-    public static JavaPairRDD<String, String> aggregateBySession(SparkSession sqlContext, JavaRDD<Row> actionRDD) {
+    public static JavaPairRDD<String, String> aggregateBySession(SparkSession sparkSession, JavaRDD<Row> actionRDD) {
         // Row相当于数据库表中的一行数据
         // 转换成PairRDD key - value
         // mapToPair对每个Row通过函数转换成Tuple<KEY,VALUE>
@@ -412,7 +514,7 @@ public class UserVisitSessionAnalyzeSpark {
 
 
         // 得到userInfoRDD
-        JavaRDD<Row> userInfoRDD = getUserInfoRDD(sqlContext);
+        JavaRDD<Row> userInfoRDD = getUserInfoRDD(sparkSession);
         // 转化为key-value
         JavaPairRDD<Long, Row> userid2InfoRDD = userInfoRDD.mapToPair((row) -> {
             return new Tuple2<>(row.getLong(0), row);

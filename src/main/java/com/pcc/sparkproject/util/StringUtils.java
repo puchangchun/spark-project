@@ -89,7 +89,7 @@ public class StringUtils {
      * @param newFieldValue 新的field值
      * @return 字段值
      */
-    public static StringBuffer setFieldInConcatString(String str,
+    public static String setFieldInConcatString(String str,
                                                 String delimiter, String field, String newFieldValue) {
         String[] fields = str.split(delimiter);
 
@@ -110,7 +110,31 @@ public class StringUtils {
             }
         }
 
-        return buffer;
+        return buffer.toString();
+    }
+
+    public static StringBuffer setFieldInConcatString(StringBuffer stringBuffer,
+                                                      String delimiter, String field, String newFieldValue) {
+        String[] fields = stringBuffer.toString().split(delimiter);
+
+        for (int i = 0; i < fields.length; i++) {
+            String fieldName = fields[i].split("=")[0];
+            if (fieldName.equals(field)) {
+                String concatField = fieldName + "=" + newFieldValue;
+                fields[i] = concatField;
+                break;
+            }
+        }
+
+        stringBuffer.delete(0,stringBuffer.length());
+        for (int i = 0; i < fields.length; i++) {
+            stringBuffer.append(fields[i]);
+            if (i < fields.length - 1) {
+                stringBuffer.append("|");
+            }
+        }
+
+        return stringBuffer;
     }
 
 }
