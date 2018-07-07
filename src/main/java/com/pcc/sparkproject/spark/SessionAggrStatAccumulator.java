@@ -8,7 +8,7 @@ import org.apache.spark.util.AccumulatorV2;
 
 /**
  * 自定义Accumulator来实现对session的统计
- * isZero: 当AccumulatorV2中存在类似数据不存在这种问题时，是否结束程序。
+ * isZero: 在新建acc时用判断是否初始化
  * copy: 拷贝一个新的AccumulatorV2
  * reset: 重置AccumulatorV2中的数据
  * add: 操作数据累加方法实现
